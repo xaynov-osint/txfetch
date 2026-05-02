@@ -1,5 +1,5 @@
 [![Version](https://img.shields.io/badge/version-1.0.0-blue)](https://github.com/xaynov-osint/txfetch)
-[![Python](https://img.shields.io/badge/python-3.9+-green)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/python-3.10+-green)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-linux%20%7C%20windows%20%7C%20macos-lightgrey)]()
 
