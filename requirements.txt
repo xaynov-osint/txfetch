@@ -1,0 +1,11 @@
+# TXFetch — requirements
+# install: pip install -r requirements.txt
+
+# HTTP-requests to all API
+requests>=2.31.0
+
+# interactive menu with arrow navigation and manual input
+prompt_toolkit>=3.0.0
+
+# Excel results export
+openpyxl>=3.1.0
