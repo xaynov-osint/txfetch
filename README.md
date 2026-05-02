@@ -40,6 +40,10 @@ pip install -r requirements.txt
 
 # 4. Create the modules package file
 touch modules/__init__.py
+
+# 5. After installing dependencies, register the CLI command
+pip install -e .
+
 ```
 
 ---
@@ -58,6 +62,30 @@ Then enter step by step:
 | 4    | Memo / comment                                        | ⬜ optional |
 
 ⚠️ **Always enter time in UTC**. If your local time is UTC+3, subtract 3 hours before entering.
+
+### Interactive mode
+```bash
+txf
+```
+
+### Direct search (no TUI)
+```bash
+txf --network tron --coin USDT --date 07.04.2026 --time 17:38 --amount 800
+txf -n ton -c TON -d 14.04.2026 -t 23:39
+txf -n btc -c BTC -d 02.05.2026 -t 00:24 --range 5min
+```
+
+### All flags
+| Flag | Short | Required | Description |
+|------|-------|----------|-------------|
+| `--network` | `-n` | ✅ | tron / ton / eth / bsc / base / btc |
+| `--coin` | `-c` | ✅ | USDT, BTC, TON, etc. |
+| `--date` | `-d` | ✅ | DD.MM.YYYY or YYYY-MM-DD (UTC) |
+| `--time` | `-t` | ✅ | HH:MM or HH:MM:SS (UTC) |
+| `--amount` | `-a` | ⬜ | expected amount |
+| `--memo` | `-m` | ⬜ | comment / memo |
+| `--range` | `-r` | ⬜ | second / minute / 1min / 5min / 15min |
+| `--tolerance` | | ⬜ | amount tolerance, default 0.01 (±1%) |
 
 ---
 
