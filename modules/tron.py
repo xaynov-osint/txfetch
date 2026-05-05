@@ -1,6 +1,6 @@
 """
 txfetch — modules/tron.py
-tron / usdt-trc20 adapter.
+tron adapter (usdt, usdc — trc20).
 
 strategy:
   1. query contract events with min/max_block_timestamp
@@ -10,6 +10,7 @@ strategy:
 
 from __future__ import annotations
 
+import datetime
 import time
 from typing import Optional
 
@@ -23,11 +24,16 @@ CONTRACTS = {
 }
 
 TRONGRID_EVENTS = "https://api.trongrid.io/v1/contracts/{contract}/events"
-DECIMALS = {"USDT": 6, "USDC": 6}
-PAGE_LIMIT = 200
-MAX_PAGES  = 50
+DECIMALS        = {"USDT": 6, "USDC": 6}
+PAGE_LIMIT      = 200
+MAX_PAGES       = 50
+REQUEST_TIMEOUT = 15
+RETRY_ATTEMPTS  = 3
+RETRY_DELAY     = 2.0
+PAGE_DELAY      = 1.0
 
-class TronUSDTAdapter:
+
+class TronAdapter:
 
     def __init__(self, api_key: Optional[str] = None,
                  min_confidence: float = 0.4):
@@ -43,46 +49,32 @@ class TronUSDTAdapter:
             return []
 
         decimals = DECIMALS.get(query.coin.upper(), 6)
-
-        min_ts = int(query.time_from.timestamp() * 1000)
-        max_ts = int(query.time_to.timestamp() * 1000)
+        min_ts   = int(query.time_from.timestamp() * 1000)
+        max_ts   = int(query.time_to.timestamp() * 1000)
 
         print(f"  [TRON] fetching {query.coin} events for time range...")
         events = self._paginate(contract, min_ts, max_ts)
         print(f"  [TRON] events received: {len(events)}")
-        if events:
-            import datetime
-            first_ts = events[0].get("block_timestamp", 0)
-            last_ts  = events[-1].get("block_timestamp", 0)
-            first_dt = datetime.datetime.utcfromtimestamp(first_ts / 1000).strftime("%H:%M:%S")
-            last_dt  = datetime.datetime.utcfromtimestamp(last_ts  / 1000).strftime("%H:%M:%S")
-            print(f"  [TRON] events span: {first_dt} UTC → {last_dt} UTC")
-            # check if target tx is in the batch
-            target = "6d2902a3ad3da3afe8aaae870dc1b3af54d12c504eb184a8bdebd8eb871c2f33"
-            found = [e for e in events if e.get("transaction_id") == target]
-            print(f"  [TRON] target tx in batch: {'YES' if found else 'NO'}")
 
         return self._filter_and_score(events, query, decimals)
 
     def _paginate(self, contract: str, min_ts: int, max_ts: int) -> list[dict]:
         url = TRONGRID_EVENTS.format(contract=contract)
         params = {
-            "event_name":        "Transfer",
-            "only_confirmed":    "true",
+            "event_name":          "Transfer",
+            "only_confirmed":      "true",
             "min_block_timestamp": min_ts,
             "max_block_timestamp": max_ts,
-            "limit":             PAGE_LIMIT,
-            "order_by":          "block_timestamp,asc",
+            "limit":               PAGE_LIMIT,
+            "order_by":            "block_timestamp,asc",
         }
 
         all_events: list[dict] = []
 
         for page in range(MAX_PAGES):
-            try:
-                resp = self.session.get(url, params=params, timeout=15)
-                resp.raise_for_status()
-            except requests.RequestException as e:
-                print(f"  [TRON] request error (page {page+1}): {e}")
+            resp = self._get_with_retry(url, params, page + 1)
+            if resp is None:
+                print(f"  [TRON] stopping at page {page + 1} — results may be incomplete.")
                 break
 
             body   = resp.json()
@@ -94,14 +86,27 @@ class TronUSDTAdapter:
                 break
 
             params["fingerprint"] = fingerprint
-            time.sleep(1.0)
+            time.sleep(PAGE_DELAY)
 
         return all_events
 
+    def _get_with_retry(self, url: str, params: dict,
+                        page: int) -> requests.Response | None:
+        """attempt request up to RETRY_ATTEMPTS times before giving up."""
+        for attempt in range(1, RETRY_ATTEMPTS + 1):
+            try:
+                resp = self.session.get(url, params=params,
+                                        timeout=REQUEST_TIMEOUT)
+                resp.raise_for_status()
+                return resp
+            except requests.RequestException as e:
+                print(f"  [TRON] error (page {page}, attempt {attempt}/{RETRY_ATTEMPTS}): {e}")
+                if attempt < RETRY_ATTEMPTS:
+                    time.sleep(RETRY_DELAY)
+        return None
+
     def _filter_and_score(self, events: list[dict], query: TXQuery,
                           decimals: int) -> list[TXCandidate]:
-        import datetime
-
         candidates: list[TXCandidate] = []
 
         for ev in events:
@@ -110,14 +115,13 @@ class TronUSDTAdapter:
             if raw_value is None:
                 continue
 
-            amount    = int(raw_value) / 10 ** decimals
-            ts_ms     = ev.get("block_timestamp", 0)
-            event_ts  = datetime.datetime.utcfromtimestamp(ts_ms / 1000).replace(
+            amount   = int(raw_value) / 10 ** decimals
+            ts_ms    = ev.get("block_timestamp", 0)
+            event_ts = datetime.datetime.utcfromtimestamp(ts_ms / 1000).replace(
                 tzinfo=datetime.timezone.utc
             )
-            event_memo = None  # tron transfer does not carry memo
 
-            confidence, detail = score_candidate(event_ts, amount, event_memo, query)
+            confidence, detail = score_candidate(event_ts, amount, None, query)
             if confidence < self.min_confidence:
                 continue
 
