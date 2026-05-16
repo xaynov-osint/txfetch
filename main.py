@@ -5,6 +5,7 @@ tui on prompt_toolkit: ascii art → network selection → step-by-step input.
 
 import sys
 import os
+import argparse
 from datetime import datetime, timezone, timedelta
 
 from prompt_toolkit import Application
@@ -447,7 +448,71 @@ def _export_excel(results):
     print(f"\n  Saved: {filename}\n")
 
 
+
+def _parse_args():
+    parser = argparse.ArgumentParser(
+        prog="txfetch",
+        description="blockchain transaction retrieval tool",
+        formatter_class=argparse.RawTextHelpFormatter,
+        epilog=(
+            "examples:\n"
+            "  txf -n tron -c USDT -d 07.04.2026 -t 17:38 -a 800\n"
+            "  txf -n ton  -c TON  -d 14.04.2026 -t 23:39\n"
+            "  txf -n btc  -c BTC  -d 02.05.2026 -t 00:24 -a 0.5 -r 5min\n"
+        )
+    )
+    parser.add_argument("--network", "-n", choices=["tron", "ton", "eth", "btc"], help="network to search on")
+    parser.add_argument("--coin",    "-c", help="coin (e.g. USDT, BTC, TON)")
+    parser.add_argument("--date",    "-d", help="date in UTC — DD.MM.YYYY or YYYY-MM-DD")
+    parser.add_argument("--time",    "-t", help="time in UTC — HH:MM or HH:MM:SS")
+    parser.add_argument("--amount",  "-a", type=float, default=None, help="expected amount (optional)")
+    parser.add_argument("--memo",    "-m", default=None, help="memo / comment (optional)")
+    parser.add_argument("--range",   "-r", choices=["second","minute","1min","5min","15min"], default="minute", help="time window (default: minute)")
+    parser.add_argument("--tolerance", type=float, default=0.01, help="amount tolerance (default: 0.01 = ±1%%)")
+    return parser.parse_args()
+
+
+def _build_time_window(anchor, range_key):
+    """build time_from / time_to from anchor and range key."""
+    if range_key == "second":
+        return anchor, anchor
+    elif range_key == "minute":
+        return anchor.replace(second=0), anchor.replace(second=59)
+    elif range_key == "1min":
+        return anchor - timedelta(minutes=1), anchor + timedelta(minutes=1)
+    elif range_key == "5min":
+        return anchor - timedelta(minutes=5), anchor + timedelta(minutes=5)
+    elif range_key == "15min":
+        return anchor - timedelta(minutes=15), anchor + timedelta(minutes=15)
+    return anchor.replace(second=0), anchor.replace(second=59)
+
 def main():
+    args = _parse_args()
+
+    if args.network and args.coin and args.date and args.time:
+        date = _parse_date(args.date)
+        if date is None:
+            print(f"  error: could not parse date '{args.date}'")
+            sys.exit(1)
+        time_result = _parse_time(args.time)
+        if time_result is None:
+            print(f"  error: could not parse time '{args.time}'")
+            sys.exit(1)
+        t, _ = time_result
+        anchor = datetime(date.year, date.month, date.day, t.hour, t.minute, t.second, tzinfo=timezone.utc)
+        time_from, time_to = _build_time_window(anchor, args.range)
+        params = {
+            "network":   args.network,
+            "coin":      args.coin.upper(),
+            "time_from": time_from,
+            "time_to":   time_to,
+            "amount":    args.amount,
+            "memo":      args.memo,
+        }
+        os.system("cls" if os.name == "nt" else "clear")
+        run_search(params)
+        sys.exit(0)
+
     os.system("cls" if os.name == "nt" else "clear")
 
     while True:
