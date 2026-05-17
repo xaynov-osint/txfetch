@@ -60,8 +60,16 @@ COINS = {
     "tron": ["USDT"],
     "ton":  ["TON", "USDT", "NOT"],
     "eth":  ["USDT", "ETH", "USDC"],
+    "bsc":  ["USDT", "BNB", "USDC"],
+    "base": ["USDC", "ETH"],
     "btc":  ["BTC"],
 }
+
+EVM_NETWORKS = [
+    ("ETH",  "Ethereum mainnet"),
+    ("BSC",  "BNB Smart Chain"),
+    ("BASE", "Base (Coinbase L2)"),
+]
 
 EXCEL_THRESHOLD = 100
 
@@ -139,7 +147,16 @@ def select_network() -> str | None:
     idx = run_menu(NETWORKS, "SELECT NETWORK")
     if idx is None:
         return None
-    return NETWORKS[idx][0].lower()
+    network = NETWORKS[idx][0].lower()
+
+    # evm — show chain submenu
+    if network == "eth":
+        evm_idx = run_menu(EVM_NETWORKS, "SELECT EVM NETWORK", show_art=False)
+        if evm_idx is None:
+            return None
+        return EVM_NETWORKS[evm_idx][0].lower()
+
+    return network
 
 def ask_params(network: str) -> dict | None:
     clear()
@@ -332,8 +349,14 @@ def run_search(params: dict):
             from modules.ton import TonAdapter
             results = TonAdapter().fetch_candidates(query)
         elif network == "eth":
-            from modules.eth import EVMAdapter
-            results = EVMAdapter().fetch_candidates(query)
+            from modules.eth import ETHAdapter
+            results = ETHAdapter().fetch_candidates(query)
+        elif network == "bsc":
+            from modules.bsc import BSCAdapter
+            results = BSCAdapter().fetch_candidates(query)
+        elif network == "base":
+            from modules.base_chain import BaseAdapter
+            results = BaseAdapter().fetch_candidates(query)
         elif network == "btc":
             from modules.btc import BTCAdapter
             results = BTCAdapter().fetch_candidates(query)
@@ -447,8 +470,6 @@ def _export_excel(results):
     wb.save(filename)
     print(f"\n  Saved: {filename}\n")
 
-
-
 def _parse_args():
     parser = argparse.ArgumentParser(
         prog="txfetch",
@@ -456,23 +477,44 @@ def _parse_args():
         formatter_class=argparse.RawTextHelpFormatter,
         epilog=(
             "examples:\n"
-            "  txf -n tron -c USDT -d 07.04.2026 -t 17:38 -a 800\n"
-            "  txf -n ton  -c TON  -d 14.04.2026 -t 23:39\n"
-            "  txf -n btc  -c BTC  -d 02.05.2026 -t 00:24 -a 0.5 -r 5min\n"
+            "  txf --network tron --coin USDT --date 07.04.2026 --time 17:38 --amount 800\n"
+            "  txf --network ton  --coin TON  --date 14.04.2026 --time 23:39\n"
+            "  txf --network btc  --coin BTC  --date 02.05.2026 --time 00:24 --amount 0.5\n"
         )
     )
-    parser.add_argument("--network", "-n", choices=["tron", "ton", "eth", "btc"], help="network to search on")
-    parser.add_argument("--coin",    "-c", help="coin (e.g. USDT, BTC, TON)")
-    parser.add_argument("--date",    "-d", help="date in UTC — DD.MM.YYYY or YYYY-MM-DD")
-    parser.add_argument("--time",    "-t", help="time in UTC — HH:MM or HH:MM:SS")
-    parser.add_argument("--amount",  "-a", type=float, default=None, help="expected amount (optional)")
-    parser.add_argument("--memo",    "-m", default=None, help="memo / comment (optional)")
-    parser.add_argument("--range",   "-r", choices=["second","minute","1min","5min","15min"], default="minute", help="time window (default: minute)")
-    parser.add_argument("--tolerance", type=float, default=0.01, help="amount tolerance (default: 0.01 = ±1%%)")
+    parser.add_argument("--network", "-n",
+        choices=["tron", "ton", "eth", "bsc", "base", "btc"],
+        help="network to search on")
+    parser.add_argument("--coin", "-c",
+        help="coin to search (e.g. USDT, BTC, TON)")
+    parser.add_argument("--date", "-d",
+        help="date in UTC — DD.MM.YYYY or YYYY-MM-DD")
+    parser.add_argument("--time", "-t",
+        help="time in UTC — HH:MM or HH:MM:SS")
+    parser.add_argument("--amount", "-a",
+        type=float, default=None,
+        help="expected amount (optional)")
+    parser.add_argument("--memo", "-m",
+        default=None,
+        help="memo / comment (optional)")
+    parser.add_argument("--range", "-r",
+        choices=["second", "minute", "1min", "5min", "15min"],
+        default="minute",
+        help=(
+            "time window around the given timestamp (default: minute)\n"
+            "  second — exact second\n"
+            "  minute — full minute HH:MM:00 to HH:MM:59\n"
+            "  1min   — ±1 minute\n"
+            "  5min   — ±5 minutes\n"
+            "  15min  — ±15 minutes"
+        ))
+    parser.add_argument("--tolerance",
+        type=float, default=0.01,
+        help="amount tolerance as fraction, e.g. 0.01 = ±1%% (default: 0.01)")
     return parser.parse_args()
 
 
-def _build_time_window(anchor, range_key):
+def _build_time_window(anchor: datetime, range_key: str):
     """build time_from / time_to from anchor and range key."""
     if range_key == "second":
         return anchor, anchor
@@ -486,21 +528,30 @@ def _build_time_window(anchor, range_key):
         return anchor - timedelta(minutes=15), anchor + timedelta(minutes=15)
     return anchor.replace(second=0), anchor.replace(second=59)
 
+
 def main():
     args = _parse_args()
 
+    # if all required args provided — run directly without TUI
     if args.network and args.coin and args.date and args.time:
         date = _parse_date(args.date)
         if date is None:
             print(f"  error: could not parse date '{args.date}'")
             sys.exit(1)
+
         time_result = _parse_time(args.time)
         if time_result is None:
             print(f"  error: could not parse time '{args.time}'")
             sys.exit(1)
+
         t, _ = time_result
-        anchor = datetime(date.year, date.month, date.day, t.hour, t.minute, t.second, tzinfo=timezone.utc)
+        anchor = datetime(
+            date.year, date.month, date.day,
+            t.hour, t.minute, t.second,
+            tzinfo=timezone.utc
+        )
         time_from, time_to = _build_time_window(anchor, args.range)
+
         params = {
             "network":   args.network,
             "coin":      args.coin.upper(),
@@ -509,10 +560,12 @@ def main():
             "amount":    args.amount,
             "memo":      args.memo,
         }
+
         os.system("cls" if os.name == "nt" else "clear")
         run_search(params)
         sys.exit(0)
 
+    # no args — launch TUI
     os.system("cls" if os.name == "nt" else "clear")
 
     while True:
