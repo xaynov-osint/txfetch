@@ -110,6 +110,7 @@ Output:
 ## Project structure
 ```
 txfetch/
+├── setup.py             # installer
 ├── main.py              # entry point — TUI, input, output
 ├── requirements.txt     # dependencies
 └── modules/
