@@ -31,6 +31,9 @@ NETWORKS = [
     ("TON",   "TON · Jetton"),
     ("ETH",   "EVM · ERC-20"),
     ("BTC",   "Bitcoin"),
+    ("LTC",   "Litecoin"),
+    ("DOGE",  "Dogecoin"),
+    ("BCH",   "Bitcoin Cash"),
 ]
 
 # time range options shown after entering a timestamp
@@ -63,6 +66,9 @@ COINS = {
     "bsc":  ["USDT", "BNB", "USDC"],
     "base": ["USDC", "ETH"],
     "btc":  ["BTC"],
+    "ltc":  ["LTC"],
+    "doge": ["DOGE"],
+    "bch":  ["BCH"],
 }
 
 EVM_NETWORKS = [
