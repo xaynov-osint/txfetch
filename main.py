@@ -164,85 +164,101 @@ def ask_params(network: str) -> dict | None:
     print("  " + "─" * 48)
 
     print("\n  [1/4]  Date (UTC)")
-    print("         Format: DD.MM.YYYY   or   YYYY-MM-DD")
+    print("         Single:  07.04.2026")
+    print("         Range:   07.04.2026-09.04.2026")
+    date_range_mode = False
+    time_from = time_to = None
     while True:
         raw_date = prompt("         › ").strip()
+        # try date range first (two dates separated by dash)
+        if raw_date.count(".") >= 4:
+            mid = raw_date.find(".", 6)  # find dot after first date
+            sep_idx = raw_date.find("-", mid) if mid > 0 else -1
+            if sep_idx > 0:
+                d1 = _parse_date(raw_date[:sep_idx].strip())
+                d2 = _parse_date(raw_date[sep_idx+1:].strip())
+                if d1 and d2:
+                    time_from = datetime(d1.year, d1.month, d1.day, 0, 0, 0, tzinfo=timezone.utc)
+                    time_to   = datetime(d2.year, d2.month, d2.day, 23, 59, 59, tzinfo=timezone.utc)
+                    date_range_mode = True
+                    break
         date = _parse_date(raw_date)
         if date is None:
-            print("         Could not parse date. Examples: 07.04.2026  or  2026-04-07")
+            print("         Could not parse. Examples: 07.04.2026  or  07.04.2026-09.04.2026")
             continue
         break
 
-    print(f"\n  [2/4]  Time (UTC)  —  date: {date.strftime('%d.%m.%Y')}")
-    print("         Format: HH:MM   or   HH:MM:SS")
-    while True:
-        raw_time = prompt("         › ").strip()
-        time_result = _parse_time(raw_time)
-        if time_result is None:
-            print("         Could not parse time. Examples: 17:38  or  17:38:45")
-            continue
-        t, has_seconds = time_result
-        break
+    if not date_range_mode:
+        print(f"\n  [2/4]  Time (UTC)  —  date: {date.strftime('%d.%m.%Y')}")
+        print("         Format: HH:MM   or   HH:MM:SS")
+        while True:
+            raw_time = prompt("         › ").strip()
+            time_result = _parse_time(raw_time)
+            if time_result is None:
+                print("         Could not parse time. Examples: 17:38  or  17:38:45")
+                continue
+            t, has_seconds = time_result
+            break
 
-    # combine date + time → anchor datetime UTC
-    anchor = datetime(
-        date.year, date.month, date.day,
-        t.hour, t.minute, t.second,
-        tzinfo=timezone.utc
-    )
+        anchor = datetime(
+            date.year, date.month, date.day,
+            t.hour, t.minute, t.second,
+            tzinfo=timezone.utc
+        )
 
-    clear()
-    print(f"\n  TXFetch  ›  {network.upper()}\n")
-    print("  " + "─" * 48)
-    print(f"\n  Anchor time: {anchor.strftime('%d.%m.%Y %H:%M:%S')} UTC\n")
-
-    # if user entered seconds, show second-aware options
-    range_items = [(n, d) for n, d, _ in TIME_RANGES]
-    range_idx = run_menu(range_items, "SELECT TIME RANGE", show_art=False)
-
-    if range_idx is None:
-        return None
-
-    range_key = TIME_RANGES[range_idx][2]
-
-    if range_key == "minute":
-        time_from = anchor.replace(second=0)
-        time_to   = anchor.replace(second=59)
-    elif range_key == "second":
-        time_from = anchor
-        time_to   = anchor
-    elif range_key == "1min":
-        time_from = anchor - timedelta(minutes=1)
-        time_to   = anchor + timedelta(minutes=1)
-    elif range_key == "5min":
-        time_from = anchor - timedelta(minutes=5)
-        time_to   = anchor + timedelta(minutes=5)
-    elif range_key == "15min":
-        time_from = anchor - timedelta(minutes=15)
-        time_to   = anchor + timedelta(minutes=15)
-    elif range_key == "custom":
         clear()
-        print(f"\n  TXFetch  ›  {network.upper()}  ›  Custom range\n")
+        print(f"\n  TXFetch  ›  {network.upper()}\n")
         print("  " + "─" * 48)
-        print(f"\n  Anchor: {anchor.strftime('%d.%m.%Y %H:%M:%S')} UTC\n")
-        print("  Enter start time (HH:MM or HH:MM:SS):")
-        while True:
-            r = _parse_time(prompt("  Start › ").strip())
-            if r is None:
-                print("  Invalid format.")
-                continue
-            ts, _ = r
-            time_from = anchor.replace(hour=ts.hour, minute=ts.minute, second=ts.second)
-            break
-        print("  Enter end time (HH:MM or HH:MM:SS):")
-        while True:
-            r = _parse_time(prompt("  End   › ").strip())
-            if r is None:
-                print("  Invalid format.")
-                continue
-            te, _ = r
-            time_to = anchor.replace(hour=te.hour, minute=te.minute, second=te.second)
-            break
+        print(f"\n  Anchor time: {anchor.strftime('%d.%m.%Y %H:%M:%S')} UTC\n")
+
+        range_items = [(n, d) for n, d, _ in TIME_RANGES]
+        range_idx = run_menu(range_items, "SELECT TIME RANGE", show_art=False)
+
+        if range_idx is None:
+            return None
+
+        range_key = TIME_RANGES[range_idx][2]
+
+        if range_key == "minute":
+            time_from = anchor.replace(second=0)
+            time_to   = anchor.replace(second=59)
+        elif range_key == "second":
+            time_from = anchor
+            time_to   = anchor
+        elif range_key == "1min":
+            time_from = anchor - timedelta(minutes=1)
+            time_to   = anchor + timedelta(minutes=1)
+        elif range_key == "5min":
+            time_from = anchor - timedelta(minutes=5)
+            time_to   = anchor + timedelta(minutes=5)
+        elif range_key == "15min":
+            time_from = anchor - timedelta(minutes=15)
+            time_to   = anchor + timedelta(minutes=15)
+        elif range_key == "custom":
+            clear()
+            print(f"\n  TXFetch  ›  {network.upper()}  ›  Custom range\n")
+            print("  " + "─" * 48)
+            print(f"\n  Anchor: {anchor.strftime('%d.%m.%Y %H:%M:%S')} UTC\n")
+            print("  Enter start time (HH:MM or HH:MM:SS):")
+            while True:
+                r = _parse_time(prompt("  Start › ").strip())
+                if r is None:
+                    print("  Invalid format.")
+                    continue
+                ts, _ = r
+                time_from = anchor.replace(hour=ts.hour, minute=ts.minute, second=ts.second)
+                break
+            print("  Enter end time (HH:MM or HH:MM:SS):")
+            while True:
+                r = _parse_time(prompt("  End   › ").strip())
+                if r is None:
+                    print("  Invalid format.")
+                    continue
+                te, _ = r
+                time_to = anchor.replace(hour=te.hour, minute=te.minute, second=te.second)
+                break
+    else:
+        print(f"\n  [2/4]  Time — skipped (full date range)")
 
     clear()
     print(f"\n  TXFetch  ›  {network.upper()}\n")
@@ -268,13 +284,25 @@ def ask_params(network: str) -> dict | None:
         print(f"         Enter name or number from the list.")
 
     print(f"\n  [4/4]  Amount in {coin}  (Enter to skip)")
+    print("         Single value: 800   Range: 500-800")
     raw_amount = prompt("         › ").strip()
-    amount = None
+    amount    = None
+    amount_to = None
     if raw_amount:
-        try:
-            amount = float(raw_amount.replace(",", "."))
-        except ValueError:
-            print("         Not a number — skipping.")
+        if "-" in raw_amount:
+            parts = raw_amount.split("-", 1)
+            try:
+                amount    = float(parts[0].strip().replace(",", "."))
+                amount_to = float(parts[1].strip().replace(",", "."))
+                print(f"         Range: {amount} — {amount_to}")
+            except ValueError:
+                print("         Could not parse range — skipping.")
+                amount = amount_to = None
+        else:
+            try:
+                amount = float(raw_amount.replace(",", "."))
+            except ValueError:
+                print("         Not a number — skipping.")
 
     print(f"\n  [5/5]  Memo / comment  (Enter to skip)")
     memo = prompt("         › ").strip() or None
@@ -283,7 +311,10 @@ def ask_params(network: str) -> dict | None:
     print(f"  Network:  {network.upper()}")
     print(f"  Coin:     {coin}")
     _show_window(time_from, time_to)
-    print(f"  Amount:   {amount if amount is not None else '—'}")
+    if amount is not None and amount_to is not None:
+        print(f"  Amount:   {amount} — {amount_to}")
+    else:
+        print(f"  Amount:   {amount if amount is not None else '—'}")
     print(f"  Memo:     {memo if memo else '—'}")
     print("  " + "─" * 48)
 
@@ -297,6 +328,7 @@ def ask_params(network: str) -> dict | None:
         "time_from": time_from,
         "time_to":   time_to,
         "amount":    amount,
+        "amount_to": amount_to,
         "memo":      memo,
     }
 
@@ -333,6 +365,7 @@ def run_search(params: dict):
         time_to   = params["time_to"],
         coin      = params["coin"],
         amount    = params.get("amount"),
+        amount_to = params.get("amount_to"),
         memo      = params.get("memo"),
     )
 
@@ -341,30 +374,43 @@ def run_search(params: dict):
     _show_window(params["time_from"], params["time_to"])
     print()
 
-    try:
+    def _run_adapter(q):
         if network == "tron":
             from modules.tron import TronAdapter
-            results = TronAdapter().fetch_candidates(query)
+            return TronAdapter().fetch_candidates(q)
         elif network == "ton":
             from modules.ton import TonAdapter
-            results = TonAdapter().fetch_candidates(query)
+            return TonAdapter().fetch_candidates(q)
         elif network == "eth":
             from modules.eth import ETHAdapter
-            results = ETHAdapter().fetch_candidates(query)
+            return ETHAdapter().fetch_candidates(q)
         elif network == "bsc":
             from modules.bsc import BSCAdapter
-            results = BSCAdapter().fetch_candidates(query)
+            return BSCAdapter().fetch_candidates(q)
         elif network == "base":
             from modules.base_chain import BaseAdapter
-            results = BaseAdapter().fetch_candidates(query)
+            return BaseAdapter().fetch_candidates(q)
         elif network == "btc":
             from modules.btc import BTCAdapter
-            results = BTCAdapter().fetch_candidates(query)
+            return BTCAdapter().fetch_candidates(q)
         else:
-            print("  Unknown network.")
-            return
+            print("  unknown network.")
+            return []
+
+    try:
+        results = _run_adapter(query)
+
+        # if memo was specified but nothing found — retry without it
+        if not results and query.memo:
+            print(f"\n  no matches with memo '{query.memo}' — retrying without it...")
+            from dataclasses import replace
+            query_no_memo = replace(query, memo=None)
+            results = _run_adapter(query_no_memo)
+            if results:
+                print("  found candidates without memo — memo scoring skipped.\n")
+
     except Exception as e:
-        print(f"  Error: {e}")
+        print(f"  error: {e}")
         return
 
     _print_results(results)
