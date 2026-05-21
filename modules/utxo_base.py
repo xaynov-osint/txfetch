@@ -95,7 +95,7 @@ class UTXOBase:
 
     def _estimate_height(self, target_ts: int, tip_height: int) -> int:
         """estimate block height using average block time."""
-        now_ts     = int(datetime.datetime.utcnow().timestamp())
+        now_ts     = int(datetime.datetime.now(datetime.timezone.utc).timestamp())
         delta_sec  = now_ts - target_ts
         est_offset = delta_sec // self.BLOCK_TIME
         return max(0, tip_height - est_offset - 5)
