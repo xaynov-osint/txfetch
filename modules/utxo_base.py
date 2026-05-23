@@ -15,12 +15,13 @@ import requests
 
 from modules.models import TXQuery, TXCandidate
 from modules.matcher import find_matches
+from modules import config
 
 # default page size for block tx pagination
-TX_PER_PAGE  = 25
-MAX_TX_PAGES = 40
-MAX_BLOCKS   = 10
-REQUEST_TIMEOUT = 15
+TX_PER_PAGE     = 25
+MAX_TX_PAGES    = config.MAX_PAGES
+MAX_BLOCKS      = 10
+REQUEST_TIMEOUT = config.REQUEST_TIMEOUT
 
 
 class UTXOBase:
