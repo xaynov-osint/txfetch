@@ -15,11 +15,12 @@ import requests
 
 from modules.models import TXQuery, TXCandidate
 from modules.matcher import find_matches
+from modules import config
 
 PAGE_OFFSET     = 1000
 MAX_PAGES       = 10
-REQUEST_TIMEOUT = 15
-PAGE_DELAY      = 0.25
+REQUEST_TIMEOUT = config.REQUEST_TIMEOUT
+PAGE_DELAY      = config.PAGE_DELAY
 
 
 class EVMBase:
