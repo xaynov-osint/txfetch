@@ -16,7 +16,9 @@ from typing import Optional
 
 import requests
 
-from modules.models import TXQuery, TXCandidate, score_candidate
+from modules.models import TXQuery, TXCandidate
+from modules.matcher import find_matches
+from modules import config
 
 CONTRACTS = {
     "USDT": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
@@ -25,12 +27,12 @@ CONTRACTS = {
 
 TRONGRID_EVENTS = "https://api.trongrid.io/v1/contracts/{contract}/events"
 DECIMALS        = {"USDT": 6, "USDC": 6}
-PAGE_LIMIT      = 200
-MAX_PAGES       = 50
-REQUEST_TIMEOUT = 15
+PAGE_LIMIT      = config.PAGE_LIMIT
+MAX_PAGES       = config.MAX_PAGES
+REQUEST_TIMEOUT = config.REQUEST_TIMEOUT
 RETRY_ATTEMPTS  = 3
 RETRY_DELAY     = 2.0
-PAGE_DELAY      = 1.0
+PAGE_DELAY      = config.PAGE_DELAY
 
 
 class TronAdapter:
@@ -38,8 +40,9 @@ class TronAdapter:
     def __init__(self, api_key: Optional[str] = None,
                  min_confidence: float = 0.4):
         self.session = requests.Session()
-        if api_key:
-            self.session.headers["TRON-PRO-API-KEY"] = api_key
+        key = api_key or config.TRONGRID_API_KEY
+        if key:
+            self.session.headers["TRON-PRO-API-KEY"] = key
         self.min_confidence = min_confidence
 
     def fetch_candidates(self, query: TXQuery) -> list[TXCandidate]:
@@ -107,36 +110,16 @@ class TronAdapter:
 
     def _filter_and_score(self, events: list[dict], query: TXQuery,
                           decimals: int) -> list[TXCandidate]:
-        candidates: list[TXCandidate] = []
-
-        for ev in events:
+        def parser(ev):
             result    = ev.get("result", {})
             raw_value = result.get("value")
             if raw_value is None:
-                continue
-
+                return None
             amount   = int(raw_value) / 10 ** decimals
             ts_ms    = ev.get("block_timestamp", 0)
             event_ts = datetime.datetime.utcfromtimestamp(ts_ms / 1000).replace(
                 tzinfo=datetime.timezone.utc
             )
+            return event_ts, amount, None, result.get("from", ""), result.get("to", ""), ev.get("transaction_id", "")
 
-            confidence, detail = score_candidate(event_ts, amount, None, query)
-            if confidence < self.min_confidence:
-                continue
-
-            candidates.append(TXCandidate(
-                tx_id        = ev.get("transaction_id", ""),
-                timestamp    = event_ts,
-                amount       = amount,
-                network      = "TRON",
-                coin         = query.coin.upper(),
-                from_address = result.get("from", ""),
-                to_address   = result.get("to", ""),
-                memo         = None,
-                confidence   = confidence,
-                score_detail = detail,
-            ))
-
-        candidates.sort(key=lambda c: c.confidence, reverse=True)
-        return candidates
+        return find_matches(events, query, parser, "TRON", self.min_confidence)
