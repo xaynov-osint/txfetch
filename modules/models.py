@@ -23,8 +23,9 @@ class TXQuery:
     time_from:       datetime.datetime   # start of window (UTC, inclusive)
     time_to:         datetime.datetime   # end of window (UTC, inclusive)
     coin:            str                 # e.g. "USDT", "BTC", "TON"
-    amount:          Optional[float] = None   # None = no filter
-    amount_tolerance: float = 0.01       # tolerance: 0.01 = ±1%
+    amount:          Optional[float] = None   # exact amount or range start
+    amount_to:       Optional[float] = None   # range end — if set, search between amount..amount_to
+    amount_tolerance: float = 0.01       # tolerance for exact match: 0.01 = ±1%
     memo:            Optional[str] = None     # comment / memo
 
     @property
@@ -88,18 +89,11 @@ def score_candidate(
     detail["time_delta_sec"] = round(delta_sec, 1)
     detail["time_score"]     = round(time_score, 3)
 
-    if query.amount is not None and query.amount > 0:
-        rel_diff = abs(event_amount - query.amount) / query.amount
-        if rel_diff == 0:
-            amount_score = 1.0
-        elif rel_diff <= query.amount_tolerance:
-            amount_score = 1.0 - rel_diff / query.amount_tolerance
-        else:
-            # amount specified but out of tolerance — hard reject
-            return 0.0, {"rejected": "amount_mismatch",
-                         "amount_diff_pct": round(rel_diff * 100, 4)}
-        detail["amount_diff_pct"] = round(rel_diff * 100, 4)
-        detail["amount_score"]    = round(amount_score, 3)
+    if query.amount is not None:
+        passes, amount_score = amount_matches(event_amount, query)
+        if not passes:
+            return 0.0, {"rejected": "amount_mismatch"}
+        detail["amount_score"] = amount_score
         has_amount = True
     else:
         amount_score = None
@@ -136,3 +130,35 @@ def score_candidate(
         confidence = w_time * time_score + w_amount * amount_score + w_memo * memo_score
 
     return round(confidence, 4), detail
+
+
+def amount_matches(event_amount: float, query: "TXQuery") -> tuple[bool, float]:
+    """
+    check if event_amount satisfies the query amount criteria.
+    returns (passes, amount_score).
+
+    if query.amount_to is set — range mode: passes if amount_from <= event <= amount_to.
+    if only query.amount is set — exact mode: passes if within tolerance.
+    if neither is set — always passes with score 1.0.
+    """
+    if query.amount is None:
+        return True, 1.0
+
+    if query.amount_to is not None:
+        # range mode
+        lo, hi = min(query.amount, query.amount_to), max(query.amount, query.amount_to)
+        if lo <= event_amount <= hi:
+            # score: 1.0 at center, lower at edges
+            center = (lo + hi) / 2
+            half   = (hi - lo) / 2 or 1
+            score  = max(0.0, 1.0 - abs(event_amount - center) / half)
+            return True, round(score, 3)
+        return False, 0.0
+
+    # exact mode with tolerance
+    rel_diff = abs(event_amount - query.amount) / query.amount if query.amount else 0
+    if rel_diff == 0:
+        return True, 1.0
+    elif rel_diff <= query.amount_tolerance:
+        return True, round(1.0 - rel_diff / query.amount_tolerance, 3)
+    return False, 0.0
