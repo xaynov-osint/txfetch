@@ -100,15 +100,19 @@ def build_menu(selected: int, items: list, title: str = "SELECT NETWORK", show_a
     lines.append(("class:divider",  "─" * 62 + "\n"))
     lines.append(("class:label",    f"  {title}\n\n"))
 
+    # выравниваем имена по максимальной длине в списке
+    max_len = max(len(name) for name, _ in items)
+
     for i, (name, tag) in enumerate(items):
+        padded = name.ljust(max_len)
         if i == selected:
             lines += [("class:cursor",  "  › "),
-                      ("class:item.sel", name),
+                      ("class:item.sel", padded),
                       ("",              "   "),
                       ("class:tag",     tag + "\n")]
         else:
             lines += [("",             "    "),
-                      ("class:item",   name),
+                      ("class:item",   padded),
                       ("",             "   "),
                       ("class:tag",    tag + "\n")]
 
