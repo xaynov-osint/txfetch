@@ -29,11 +29,22 @@ SUBTITLE = "  Blockchain Transaction Retrieval Tool  ·  by xaynov (@ownstates)"
 NETWORKS = [
     ("TRON",  "USDT · TRC-20"),
     ("TON",   "TON · Jetton"),
-    ("ETH",   "EVM · ERC-20"),
-    ("BTC",   "Bitcoin"),
-    ("LTC",   "Litecoin"),
-    ("DOGE",  "Dogecoin"),
-    ("BCH",   "Bitcoin Cash"),
+    ("EVM",   "Ethereum · BSC · Base"),
+    ("SOL",   "Solana · SPL"),
+    ("UTXO",  "BTC · LTC · DOGE · BCH"),
+]
+
+EVM_NETWORKS = [
+    ("ETH",  "Ethereum mainnet"),
+    ("BSC",  "BNB Smart Chain"),
+    ("BASE", "Base (Coinbase L2)"),
+]
+
+UTXO_NETWORKS = [
+    ("BTC",  "Bitcoin"),
+    ("LTC",  "Litecoin"),
+    ("DOGE", "Dogecoin"),
+    ("BCH",  "Bitcoin Cash"),
 ]
 
 # time range options shown after entering a timestamp
@@ -60,11 +71,12 @@ STYLE = Style.from_dict({
 })
 
 COINS = {
-    "tron": ["USDT"],
+    "tron": ["USDT", "USDC"],
     "ton":  ["TON", "USDT", "NOT"],
     "eth":  ["USDT", "ETH", "USDC"],
     "bsc":  ["USDT", "BNB", "USDC"],
     "base": ["USDC", "ETH"],
+    "sol":  ["SOL", "USDC", "USDT", "RAY", "JUP"],
     "btc":  ["BTC"],
     "ltc":  ["LTC"],
     "doge": ["DOGE"],
@@ -155,12 +167,17 @@ def select_network() -> str | None:
         return None
     network = NETWORKS[idx][0].lower()
 
-    # evm — show chain submenu
-    if network == "eth":
+    if network == "evm":
         evm_idx = run_menu(EVM_NETWORKS, "SELECT EVM NETWORK", show_art=False)
         if evm_idx is None:
             return None
         return EVM_NETWORKS[evm_idx][0].lower()
+
+    if network == "utxo":
+        utxo_idx = run_menu(UTXO_NETWORKS, "SELECT UTXO NETWORK", show_art=False)
+        if utxo_idx is None:
+            return None
+        return UTXO_NETWORKS[utxo_idx][0].lower()
 
     return network
 
@@ -381,27 +398,27 @@ def run_search(params: dict):
     print()
 
     def _run_adapter(q):
-        if network == "tron":
-            from modules.tron import TronAdapter
-            return TronAdapter().fetch_candidates(q)
-        elif network == "ton":
-            from modules.ton import TonAdapter
-            return TonAdapter().fetch_candidates(q)
-        elif network == "eth":
-            from modules.eth import ETHAdapter
-            return ETHAdapter().fetch_candidates(q)
-        elif network == "bsc":
-            from modules.bsc import BSCAdapter
-            return BSCAdapter().fetch_candidates(q)
-        elif network == "base":
-            from modules.base_chain import BaseAdapter
-            return BaseAdapter().fetch_candidates(q)
-        elif network == "btc":
-            from modules.btc import BTCAdapter
-            return BTCAdapter().fetch_candidates(q)
-        else:
-            print("  unknown network.")
+        import importlib
+        adapters = {
+            "tron": ("modules.tron",        "TronAdapter"),
+            "ton":  ("modules.ton",         "TonAdapter"),
+            "eth":  ("modules.eth",         "ETHAdapter"),
+            "bsc":  ("modules.bsc",         "BSCAdapter"),
+            "base": ("modules.base_chain",  "BaseAdapter"),
+            "btc":  ("modules.btc",         "BTCAdapter"),
+            "ltc":  ("modules.ltc",         "LTCAdapter"),
+            "doge": ("modules.doge",        "DOGEAdapter"),
+            "bch":  ("modules.bch",         "BCHAdapter"),
+            "sol":  ("modules.solana",      "SolanaAdapter"),
+        }
+        info = adapters.get(network)
+        if not info:
+            print(f"  unknown network: {network}")
             return []
+        module_path, class_name = info
+        module  = importlib.import_module(module_path)
+        adapter = getattr(module, class_name)()
+        return adapter.fetch_candidates(q)
 
     try:
         results = _run_adapter(query)
