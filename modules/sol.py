@@ -32,12 +32,18 @@ HELIUS_RPC  = "https://mainnet.helius-rpc.com/?api-key={key}"
 
 # ── spl token mints ───────────────────────────────────────────────────────────
 
+# primary mint addresses (Token program)
 TOKEN_MINTS = {
     "USDC": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
     "USDT": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
     "RAY":  "4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R",
     "JUP":  "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
     "SOL":  None,   # native — handled separately
+}
+
+# token-2022 alternative mints — checked in parallel for dual-standard tokens
+TOKEN_MINTS_2022 = {
+    "USDC": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",  # same for now, placeholder for future
 }
 
 TOKEN_DECIMALS = {
@@ -73,6 +79,22 @@ class SolanaAdapter:
         self.rpc_url = HELIUS_RPC.format(key=key) if key else PUBLIC_RPC
         self.has_key = bool(key)
 
+    def _get_mint_decimals(self, mint: str) -> int:
+        """
+        fetch decimals for unknown mint via getMintInfo rpc call.
+        falls back to 6 if request fails — logs a warning.
+        """
+        resp = self._rpc("getAccountInfo", [mint, {"encoding": "jsonParsed"}])
+        if resp:
+            try:
+                decimals = (resp["result"]["value"]["data"]
+                               ["parsed"]["info"]["decimals"])
+                return int(decimals)
+            except (KeyError, TypeError):
+                pass
+        print(f"  [SOL] could not fetch decimals for {mint[:8]}... — using 6 as fallback")
+        return 6
+
     def fetch_candidates(self, query: TXQuery) -> list[TXCandidate]:
         coin = query.coin.upper()
 
@@ -80,8 +102,12 @@ class SolanaAdapter:
             print(f"  [SOL] coin {coin} not supported. available: {list(TOKEN_MINTS)}")
             return []
 
-        decimals = TOKEN_DECIMALS.get(coin, 6)
+        decimals = TOKEN_DECIMALS.get(coin)
         mint     = TOKEN_MINTS[coin]
+
+        # fetch decimals dynamically if not hardcoded
+        if decimals is None:
+            decimals = self._get_mint_decimals(mint)
 
         ts_from = int(query.time_from.timestamp())
         ts_to   = int(query.time_to.timestamp())
@@ -91,6 +117,16 @@ class SolanaAdapter:
 
         print(f"  [SOL] fetching {coin} signatures for mint {mint[:8]}...")
         sigs = self._get_signatures_in_range(mint, ts_from, ts_to)
+
+        # dual mint: check token-2022 address if available
+        mint_2022 = TOKEN_MINTS_2022.get(coin)
+        if mint_2022 and mint_2022 != mint:
+            print(f"  [SOL] also checking token-2022 mint...")
+            sigs_2022 = self._get_signatures_in_range(mint_2022, ts_from, ts_to)
+            # merge deduplicating by signature
+            seen = set(sigs)
+            sigs += [s for s in sigs_2022 if s not in seen]
+
         print(f"  [SOL] signatures in range: {len(sigs)}")
 
         if not sigs:
