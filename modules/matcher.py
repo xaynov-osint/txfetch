@@ -66,5 +66,12 @@ def find_matches(
             score_detail = detail,
         ))
 
+    # deduplicate by tx_id — keep highest confidence for each
+    seen: dict = {}
+    for c in candidates:
+        if c.tx_id not in seen or c.confidence > seen[c.tx_id].confidence:
+            seen[c.tx_id] = c
+    candidates = list(seen.values())
+
     candidates.sort(key=lambda c: c.confidence, reverse=True)
     return candidates

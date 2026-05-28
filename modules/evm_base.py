@@ -59,6 +59,12 @@ class EVMBase:
             print(f"  [{self.NETWORK}] could not determine block range.")
             return []
 
+        # if window is 0s or same block — expand by 1 block each side
+        if start_block >= end_block:
+            start_block = max(0, start_block - 1)
+            end_block   = end_block + 1
+            print(f"  [{self.NETWORK}] window too narrow — expanded to ±1 block")
+
         print(f"  [{self.NETWORK}] blocks: {start_block} → {end_block}")
 
         if contract is None:
