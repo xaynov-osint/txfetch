@@ -99,14 +99,36 @@ class UTXOBase:
         now_ts     = int(datetime.datetime.now(datetime.timezone.utc).timestamp())
         delta_sec  = now_ts - target_ts
         est_offset = delta_sec // self.BLOCK_TIME
-        return max(0, tip_height - est_offset - 5)
+        # start ABOVE the target (newer) with a buffer, then scan downwards
+        return max(0, tip_height - est_offset + 5)
 
     def _collect_blocks_in_range(self, start_height: int,
                                   ts_from: int, ts_to: int) -> list[dict]:
         in_range: list[dict] = []
         height = start_height
 
-        for _ in range(MAX_BLOCKS + 5):
+        # correct the estimate: if the starting block is already older than
+        # the window, climb up until we are above ts_to
+        for _ in range(20):
+            try:
+                resp = self.session.get(
+                    f"{self.API_BASE}/v1/blocks/{height}", timeout=REQUEST_TIMEOUT
+                )
+                resp.raise_for_status()
+                probe = resp.json()
+            except Exception:
+                break
+            if not probe:
+                break
+            newest_ts = probe[0].get("timestamp", 0)
+            if newest_ts < ts_from:
+                # estimate too low — climb up
+                height = min(height + 10, probe[0]["height"] + 10)
+                time.sleep(0.2)
+            else:
+                break
+
+        for _ in range(MAX_BLOCKS + 15):
             try:
                 resp = self.session.get(
                     f"{self.API_BASE}/v1/blocks/{height}", timeout=REQUEST_TIMEOUT
