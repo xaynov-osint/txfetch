@@ -10,9 +10,9 @@ from modules import config
 
 class BaseAdapter(EVMBase):
     NETWORK = "BASE"
-    API_URL = "https://api.basescan.org/api"
+    API_URL  = "https://api.basescan.org/v2/api"
+    CHAIN_ID = "8453"
     API_KEY = config.ETHERSCAN_API_KEY   # basescan accepts etherscan key
     TOKENS  = {
         "USDC": {"address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "decimals": 6},
-        "ETH":  {"address": None, "decimals": 18},
     }

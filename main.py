@@ -73,9 +73,9 @@ STYLE = Style.from_dict({
 COINS = {
     "tron": ["USDT", "USDC"],
     "ton":  ["TON", "USDT", "NOT"],
-    "eth":  ["USDT", "ETH", "USDC"],
-    "bsc":  ["USDT", "BNB", "USDC"],
-    "base": ["USDC", "ETH"],
+    "eth":  ["USDT", "USDC"],
+    "bsc":  ["USDT", "USDC"],
+    "base": ["USDC"],
     "sol":  ["SOL", "USDC", "USDT", "RAY", "JUP"],
     "btc":  ["BTC"],
     "ltc":  ["LTC"],

@@ -68,15 +68,17 @@ class EVMBase:
         print(f"  [{self.NETWORK}] blocks: {start_block} → {end_block}")
 
         if contract is None:
-            txs = self._fetch_native(start_block, end_block)
-        else:
-            txs = self._fetch_tokentx(contract, start_block, end_block)
+            print(f"  [{self.NETWORK}] native coin search without address is not supported.")
+            print(f"  [{self.NETWORK}] use a token (USDT, USDC) — they work for any date via tokentx.")
+            return []
+        txs = self._fetch_tokentx(contract, start_block, end_block)
 
         print(f"  [{self.NETWORK}] transactions received: {len(txs)}")
         return self._filter_and_score(txs, query, coin, decimals)
 
     def _ts_to_block(self, timestamp: int, closest: str) -> Optional[int]:
         params = {
+            "chainid":   getattr(self, "CHAIN_ID", "1"),
             "module":    "block",
             "action":    "getblocknobytime",
             "timestamp": timestamp,
@@ -97,6 +99,7 @@ class EVMBase:
         all_txs: list[dict] = []
         for page in range(1, MAX_PAGES + 1):
             params = {
+                "chainid":         getattr(self, "CHAIN_ID", "1"),
                 "module":          "account",
                 "action":          "tokentx",
                 "contractaddress": contract,
@@ -117,35 +120,6 @@ class EVMBase:
             if data.get("status") != "1":
                 break
             txs = data.get("result", [])
-            all_txs.extend(txs)
-            if len(txs) < PAGE_OFFSET:
-                break
-            time.sleep(PAGE_DELAY)
-        return all_txs
-
-    def _fetch_native(self, start_block: int, end_block: int) -> list[dict]:
-        all_txs: list[dict] = []
-        for page in range(1, MAX_PAGES + 1):
-            params = {
-                "module":     "account",
-                "action":     "txlist",
-                "startblock": start_block,
-                "endblock":   end_block,
-                "page":       page,
-                "offset":     PAGE_OFFSET,
-                "sort":       "asc",
-                "apikey":     self.API_KEY or "YourApiKeyToken",
-            }
-            try:
-                resp = self.session.get(self.API_URL, params=params, timeout=REQUEST_TIMEOUT)
-                resp.raise_for_status()
-                data = resp.json()
-            except Exception as e:
-                print(f"  [{self.NETWORK}] txlist error (page {page}): {e}")
-                break
-            if data.get("status") != "1":
-                break
-            txs = [t for t in data.get("result", []) if t.get("isError") == "0"]
             all_txs.extend(txs)
             if len(txs) < PAGE_OFFSET:
                 break
