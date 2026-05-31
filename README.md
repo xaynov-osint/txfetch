@@ -57,7 +57,9 @@ pip install -r requirements.txt
 pip install -e .
 
 # 5. copy env template
-cp .env.example .env
+cp .env.example .env          # Linux / macOS
+copy .env.example .env        # Windows
+
 ```
 
 ---
