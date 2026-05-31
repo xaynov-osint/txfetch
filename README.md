@@ -42,7 +42,7 @@ You know approximately when a transfer happened and how much was sent — but yo
 
 ```bash
 # 1. clone the repository
-git clone https://github.com/ownstates/txfetch.git
+git clone https://github.com/xaynov-osint/txfetch.git
 cd txfetch
 
 # 2. create and activate virtual environment
